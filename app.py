@@ -4,66 +4,50 @@ import sqlite3
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+app.secret_key = 'your_secret_key_here'
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf'}
+ADMIN_PASSWORD = 'admin123'
 
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-DATABASE = 'notes.db'
+# --- Check if file is allowed ---
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Ensure database and table exist
-def init_db():
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        course TEXT,
-        semester TEXT,
-        subject TEXT,
-        type TEXT,
-        filename TEXT
-    )''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-# Admin login
-@app.route('/admin', methods=['GET', 'POST'])
-def admin():
+# --- Home/Search Page ---
+@app.route('/', methods=['GET', 'POST'])
+def index():
     if request.method == 'POST':
-        if request.form['password'] == 'admin123':
-            session['admin'] = True
-            return redirect(url_for('view_files'))
+        course = request.form['course']
+        semester = request.form['semester']
+        subject = request.form['subject']
+        material_type = request.form['type']
+
+        conn = sqlite3.connect('notes.db')
+        c = conn.cursor()
+        c.execute('''SELECT filename FROM notes WHERE course=? AND semester=? AND subject=? AND type=?''',
+                  (course, semester, subject, material_type))
+        file = c.fetchone()
+        conn.close()
+
+        if file:
+            return render_template('index.html', link=url_for('download_file', filename=file[0]))
         else:
-            flash('Incorrect password')
-    return render_template('admin.html')
+            flash("No matching file found.")
+    return render_template('index.html')
 
-# Admin logout
-@app.route('/logout')
-def logout():
-    session.pop('admin', None)
-    return redirect(url_for('admin'))
+# --- File Download Route ---
+@app.route('/uploads/<filename>')
+def download_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# Admin view
-@app.route('/admin/files')
-def view_files():
-    if not session.get('admin'):
-        return redirect(url_for('admin'))
-
-    conn = sqlite3.connect(DATABASE)
-    c = conn.cursor()
-    c.execute("SELECT id, course, semester, subject, type, filename FROM notes")
-    files = c.fetchall()
-    conn.close()
-    return render_template('admin_files.html', files=files)
-
-# File upload
+# --- Upload Route ---
 @app.route('/upload', methods=['GET', 'POST'])
-def upload_file():
+def upload():
     if request.method == 'POST':
         course = request.form['course']
         semester = request.form['semester']
@@ -71,66 +55,54 @@ def upload_file():
         material_type = request.form['type']
         file = request.files['file']
 
-        if file and file.filename.endswith('.pdf'):
+        if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
-            file.save(os.path.join(UPLOAD_FOLDER, filename))
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
 
-            conn = sqlite3.connect(DATABASE)
+            conn = sqlite3.connect('notes.db')
             c = conn.cursor()
-            c.execute("INSERT INTO notes (course, semester, subject, type, filename) VALUES (?, ?, ?, ?, ?)",
+            c.execute('''INSERT INTO notes (course, semester, subject, type, filename) 
+                         VALUES (?, ?, ?, ?, ?)''',
                       (course, semester, subject, material_type, filename))
             conn.commit()
             conn.close()
-            return redirect(url_for('upload_file'))
-
+            flash("File uploaded successfully.")
+            return redirect(url_for('upload'))
     return render_template('upload.html')
 
-# File search
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    results = []
+# --- Admin Login ---
+@app.route('/admin', methods=['GET', 'POST'])
+def admin():
     if request.method == 'POST':
-        course = request.form['course']
-        semester = request.form['semester']
-        subject = request.form['subject']
-        material_type = request.form['type']
+        password = request.form['password']
+        if password == ADMIN_PASSWORD:
+            session['admin'] = True
+            return redirect(url_for('view_files'))
+        else:
+            flash("Incorrect password.")
+    return render_template('admin_login.html')
 
-        query = "SELECT filename FROM notes WHERE 1=1"
-        params = []
+# --- View All Uploaded Files ---
+@app.route('/admin/files')
+def view_files():
+    if not session.get('admin'):
+        return redirect(url_for('admin'))
 
-        if course:
-            query += " AND course=?"
-            params.append(course)
-        if semester:
-            query += " AND semester=?"
-            params.append(semester)
-        if subject:
-            query += " AND subject=?"
-            params.append(subject)
-        if material_type:
-            query += " AND type=?"
-            params.append(material_type)
+    conn = sqlite3.connect('notes.db')
+    c = conn.cursor()
+    c.execute("SELECT id, course, semester, subject, type, filename FROM notes")
+    files = c.fetchall()
+    conn.close()
+    return render_template('admin_files.html', files=files)
 
-        conn = sqlite3.connect(DATABASE)
-        c = conn.cursor()
-        c.execute(query, params)
-        results = c.fetchall()
-        conn.close()
-
-    return render_template('index.html', results=results)
-
-# Download file
-@app.route('/download/<filename>')
-def download(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=True)
-
-# Delete file
+# --- Delete File ---
 @app.route('/delete/<int:id>')
 def delete_file(id):
     if not session.get('admin'):
         return redirect(url_for('admin'))
 
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect('notes.db')
     c = conn.cursor()
     c.execute("SELECT filename FROM notes WHERE id=?", (id,))
     file = c.fetchone()
@@ -143,13 +115,13 @@ def delete_file(id):
     conn.close()
     return redirect(url_for('view_files'))
 
-# Edit file metadata
+# --- Edit File Metadata ---
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_file(id):
     if not session.get('admin'):
         return redirect(url_for('admin'))
 
-    conn = sqlite3.connect(DATABASE)
+    conn = sqlite3.connect('notes.db')
     c = conn.cursor()
 
     if request.method == 'POST':
@@ -157,6 +129,7 @@ def edit_file(id):
         semester = request.form['semester']
         subject = request.form['subject']
         material_type = request.form['type']
+
         c.execute("UPDATE notes SET course=?, semester=?, subject=?, type=? WHERE id=?",
                   (course, semester, subject, material_type, id))
         conn.commit()
@@ -168,5 +141,7 @@ def edit_file(id):
     conn.close()
     return render_template('edit.html', id=id, data=data)
 
+# --- Run for Render ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Default port if not on Render
+    app.run(host='0.0.0.0', port=port, debug=True)

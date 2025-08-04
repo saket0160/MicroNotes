@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="mb-4 text-center">Admin Login</h2>
+<form method="POST" class="col-md-6 offset-md-3">
+    <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" name="password" id="password" class="form-control" required>
+    </div>
+    <div class="text-center">
+        <button type="submit" class="btn btn-dark">Login</button>
+    </div>
+</form>
+{% endblock %}
