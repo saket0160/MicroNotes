@@ -19,26 +19,25 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- Home/Search Page ---
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        course = request.form['course']
-        semester = request.form['semester']
-        subject = request.form['subject']
-        material_type = request.form['type']
+    files = []
 
-        conn = sqlite3.connect('notes.db')
-        c = conn.cursor()
-        c.execute('''SELECT filename FROM notes WHERE course=? AND semester=? AND subject=? AND type=?''',
-                  (course, semester, subject, material_type))
-        file = c.fetchone()
-        conn.close()
+    if request.method == "POST":
+        course = request.form.get("course")
+        semester = request.form.get("semester")
+        subject = request.form.get("subject")
+        material_type = request.form.get("material_type")
 
-        if file:
-            return render_template('index.html', link=url_for('download_file', filename=file[0]))
-        else:
-            flash("No matching file found.")
-    return render_template('index.html')
+        files = db.session.query(YourModel).filter_by(
+            course=course,
+            semester=semester,
+            subject=subject,
+            material_type=material_type
+        ).all()
+
+    return render_template("index.html", files=files)
+
 
 # --- File Download Route ---
 @app.route('/uploads/<filename>')
@@ -140,6 +139,10 @@ def edit_file(id):
     data = c.fetchone()
     conn.close()
     return render_template('edit.html', id=id, data=data)
+
+@app.route('/download/<filename>')
+def download(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
 # --- Run for Render ---
 if __name__ == '__main__':

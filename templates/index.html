@@ -49,3 +49,16 @@
 </ul>
 {% endif %}
 {% endblock %}
+{% if files %}
+    <h3>Results:</h3>
+    <ul>
+        {% for file in files %}
+            <li>
+                {{ file.filename }}
+                - <a href="{{ url_for('download', filename=file.filename) }}">Download</a>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No files found.</p>
+{% endif %}
