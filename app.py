@@ -3,7 +3,15 @@ import os
 import sqlite3
 from werkzeug.utils import secure_filename
 
+from flask_sqlalchemy import SQLAlchemy
+
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///yourdatabase.db'  # or your DB URI
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+
 app.secret_key = 'your_secret_key_here'
 
 UPLOAD_FOLDER = 'uploads'
