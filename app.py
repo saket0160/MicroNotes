@@ -1,17 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session, flash
-import os
-import sqlite3
-from werkzeug.utils import secure_filename
-
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.utils import secure_filename
+import os
 
+# --- App Config ---
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///yourdatabase.db'  # or your DB URI
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-
 app.secret_key = 'your_secret_key_here'
 
 UPLOAD_FOLDER = 'uploads'
@@ -19,16 +12,20 @@ ALLOWED_EXTENSIONS = {'pdf'}
 ADMIN_PASSWORD = 'admin123'
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+# --- Ensure upload folder exists ---
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# --- Check if file is allowed ---
+# --- Allowed file check ---
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- Home/Search Page ---
-
-
+# --- Model ---
 class Notes(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course = db.Column(db.String(100))
@@ -37,6 +34,11 @@ class Notes(db.Model):
     material_type = db.Column(db.String(100))
     filename = db.Column(db.String(200))
 
+# --- Create DB Table (Run once on startup) ---
+with app.app_context():
+    db.create_all()
+
+# --- Home/Search Page ---
 @app.route("/", methods=["GET", "POST"])
 def index():
     files = []
@@ -46,7 +48,7 @@ def index():
         subject = request.form.get("subject")
         material_type = request.form.get("material_type")
 
-        files = db.session.query(Notes).filter_by(
+        files = Notes.query.filter_by(
             course=course,
             semester=semester,
             subject=subject,
@@ -55,13 +57,8 @@ def index():
 
     return render_template("index.html", files=files)
 
-# --- File Download Route ---
-@app.route('/uploads/<filename>')
-def download_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-# --- Upload Route ---
-@app.route('/upload', methods=['GET', 'POST'])
+# --- Upload File ---
+@app.route("/upload", methods=["GET", "POST"])
 def upload():
     if request.method == 'POST':
         course = request.form['course']
@@ -75,16 +72,20 @@ def upload():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
 
-            conn = sqlite3.connect('notes.db')
-            c = conn.cursor()
-            c.execute('''INSERT INTO notes (course, semester, subject, type, filename) 
-                         VALUES (?, ?, ?, ?, ?)''',
-                      (course, semester, subject, material_type, filename))
-            conn.commit()
-            conn.close()
+            new_note = Notes(course=course, semester=semester, subject=subject,
+                             material_type=material_type, filename=filename)
+            db.session.add(new_note)
+            db.session.commit()
+
             flash("File uploaded successfully.")
             return redirect(url_for('upload'))
+
     return render_template('upload.html')
+
+# --- File Download ---
+@app.route('/download/<filename>')
+def download(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
 # --- Admin Login ---
 @app.route('/admin', methods=['GET', 'POST'])
@@ -104,11 +105,7 @@ def view_files():
     if not session.get('admin'):
         return redirect(url_for('admin'))
 
-    conn = sqlite3.connect('notes.db')
-    c = conn.cursor()
-    c.execute("SELECT id, course, semester, subject, type, filename FROM notes")
-    files = c.fetchall()
-    conn.close()
+    files = Notes.query.all()
     return render_template('admin_files.html', files=files)
 
 # --- Delete File ---
@@ -117,17 +114,13 @@ def delete_file(id):
     if not session.get('admin'):
         return redirect(url_for('admin'))
 
-    conn = sqlite3.connect('notes.db')
-    c = conn.cursor()
-    c.execute("SELECT filename FROM notes WHERE id=?", (id,))
-    file = c.fetchone()
-    if file:
-        filepath = os.path.join(UPLOAD_FOLDER, file[0])
+    note = Notes.query.get(id)
+    if note:
+        filepath = os.path.join(UPLOAD_FOLDER, note.filename)
         if os.path.exists(filepath):
             os.remove(filepath)
-        c.execute("DELETE FROM notes WHERE id=?", (id,))
-        conn.commit()
-    conn.close()
+        db.session.delete(note)
+        db.session.commit()
     return redirect(url_for('view_files'))
 
 # --- Edit File Metadata ---
@@ -136,31 +129,18 @@ def edit_file(id):
     if not session.get('admin'):
         return redirect(url_for('admin'))
 
-    conn = sqlite3.connect('notes.db')
-    c = conn.cursor()
-
+    note = Notes.query.get(id)
     if request.method == 'POST':
-        course = request.form['course']
-        semester = request.form['semester']
-        subject = request.form['subject']
-        material_type = request.form['type']
-
-        c.execute("UPDATE notes SET course=?, semester=?, subject=?, type=? WHERE id=?",
-                  (course, semester, subject, material_type, id))
-        conn.commit()
-        conn.close()
+        note.course = request.form['course']
+        note.semester = request.form['semester']
+        note.subject = request.form['subject']
+        note.material_type = request.form['type']
+        db.session.commit()
         return redirect(url_for('view_files'))
 
-    c.execute("SELECT course, semester, subject, type FROM notes WHERE id=?", (id,))
-    data = c.fetchone()
-    conn.close()
-    return render_template('edit.html', id=id, data=data)
+    return render_template('edit.html', id=id, data=note)
 
-@app.route('/download/<filename>')
-def download(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
-
-# --- Run for Render ---
+# --- For Render Deployment ---
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))  # Default port if not on Render
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port, debug=True)
