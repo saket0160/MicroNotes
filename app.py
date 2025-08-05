@@ -27,17 +27,26 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- Home/Search Page ---
+
+
+class Notes(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    course = db.Column(db.String(100))
+    semester = db.Column(db.String(100))
+    subject = db.Column(db.String(100))
+    material_type = db.Column(db.String(100))
+    filename = db.Column(db.String(200))
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     files = []
-
     if request.method == "POST":
         course = request.form.get("course")
         semester = request.form.get("semester")
         subject = request.form.get("subject")
         material_type = request.form.get("material_type")
 
-        files = db.session.query(YourModel).filter_by(
+        files = db.session.query(Notes).filter_by(
             course=course,
             semester=semester,
             subject=subject,
@@ -45,7 +54,6 @@ def index():
         ).all()
 
     return render_template("index.html", files=files)
-
 
 # --- File Download Route ---
 @app.route('/uploads/<filename>')
