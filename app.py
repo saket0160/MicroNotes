@@ -1,15 +1,16 @@
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from sqlalchemy import func
 import os
 
 # --- App Config ---
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'
+app.secret_key = os.environ.get('SECRET_KEY', 'default_secret_key')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin1000')
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf'}
-ADMIN_PASSWORD = 'admin123'
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'
@@ -30,30 +31,31 @@ class Notes(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course = db.Column(db.String(100))
     semester = db.Column(db.String(100))
-    subject = db.Column(db.String(100))
+    subject_code = db.Column(db.String(100))  # Already renamed
     material_type = db.Column(db.String(100))
     filename = db.Column(db.String(200))
 
-# --- Create DB Table (Run once on startup) ---
+# --- Create DB Table ---
 with app.app_context():
     db.create_all()
 
 # --- Home/Search Page ---
 @app.route("/", methods=["GET", "POST"])
 def index():
-    files = []
+    files = None
     if request.method == "POST":
         course = request.form.get("course")
         semester = request.form.get("semester")
-        subject = request.form.get("subject")
-        material_type = request.form.get("material_type")
+        subject_code = request.form.get("subject_code")
+        material_type = request.form.get("type")
 
-        files = Notes.query.filter_by(
-            course=course,
-            semester=semester,
-            subject=subject,
-            material_type=material_type
-        ).all()
+        if course and semester and subject_code and material_type:
+            files = Notes.query.filter(
+                Notes.course == course,
+                Notes.semester == semester,
+                func.lower(Notes.subject_code) == subject_code.lower(),
+                Notes.material_type == material_type
+            ).all()
 
     return render_template("index.html", files=files)
 
@@ -63,7 +65,7 @@ def upload():
     if request.method == 'POST':
         course = request.form['course']
         semester = request.form['semester']
-        subject = request.form['subject']
+        subject_code = request.form['subject_code'].upper()  # Normalize
         material_type = request.form['type']
         file = request.files['file']
 
@@ -72,7 +74,7 @@ def upload():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
 
-            new_note = Notes(course=course, semester=semester, subject=subject,
+            new_note = Notes(course=course, semester=semester, subject_code=subject_code,
                              material_type=material_type, filename=filename)
             db.session.add(new_note)
             db.session.commit()
@@ -133,14 +135,14 @@ def edit_file(id):
     if request.method == 'POST':
         note.course = request.form['course']
         note.semester = request.form['semester']
-        note.subject = request.form['subject']
+        note.subject_code = request.form['subject_code'].upper()  # Normalize
         note.material_type = request.form['type']
         db.session.commit()
         return redirect(url_for('view_files'))
 
     return render_template('edit.html', id=id, data=note)
 
-# --- For Render Deployment ---
+# --- Run Server ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port, debug=True)

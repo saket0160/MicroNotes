@@ -1,6 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2 class="mb-4">Upload Notes</h2>
+
+{% with messages = get_flashed_messages() %}
+  {% if messages %}
+    <div class="alert alert-success">
+      {{ messages[0] }}
+    </div>
+  {% endif %}
+{% endwith %}
+
 <form method="POST" enctype="multipart/form-data" class="row g-3">
     <div class="col-md-6">
         <label for="course" class="form-label">Course</label>
@@ -10,31 +19,38 @@
             <option value="Diploma">Diploma</option>
         </select>
     </div>
+
     <div class="col-md-6">
         <label for="semester" class="form-label">Semester</label>
         <select name="semester" id="semester" class="form-select" required>
+            <option value="">Select Semester</option>
             {% for i in range(1, 9) %}
                 <option value="{{ i }}">Semester {{ i }}</option>
             {% endfor %}
         </select>
     </div>
+
     <div class="col-md-6">
-        <label for="subject" class="form-label">Subject</label>
-        <input type="text" name="subject" id="subject" class="form-control" required>
+        <label for="subject_code" class="form-label">Subject Code</label>
+        <input type="text" name="subject_code" id="subject_code" class="form-control" placeholder="e.g., MATH101" required>
     </div>
+
     <div class="col-md-6">
         <label for="type" class="form-label">Material Type</label>
         <select name="type" id="type" class="form-select" required>
             <option value="">Select Type</option>
             <option value="Notes">Notes</option>
-            <option value="Question Paper">Question Paper</option>
             <option value="Syllabus">Syllabus</option>
+            <option value="Previous Year Questions">Previous Year Questions</option>
+            <option value="Micro Notes">Micro Notes</option>
         </select>
     </div>
+
     <div class="col-md-12">
-        <label for="file" class="form-label">Choose PDF</label>
+        <label for="file" class="form-label">Upload PDF</label>
         <input type="file" name="file" id="file" class="form-control" accept=".pdf" required>
     </div>
+
     <div class="col-12 text-center">
         <button type="submit" class="btn btn-success">Upload</button>
     </div>

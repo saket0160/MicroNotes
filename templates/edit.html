@@ -4,19 +4,24 @@
 <form method="POST" class="row g-3">
     <div class="col-md-6">
         <label class="form-label">Course</label>
-        <input type="text" name="course" class="form-control" value="{{ data[0] }}" required>
+        <input type="text" name="course" class="form-control" value="{{ data.course }}" required>
     </div>
     <div class="col-md-6">
         <label class="form-label">Semester</label>
-        <input type="text" name="semester" class="form-control" value="{{ data[1] }}" required>
+        <input type="text" name="semester" class="form-control" value="{{ data.semester }}" required>
     </div>
     <div class="col-md-6">
-        <label class="form-label">Subject</label>
-        <input type="text" name="subject" class="form-control" value="{{ data[2] }}" required>
+        <label class="form-label">Subject Code</label>
+        <input type="text" name="subject_code" class="form-control" value="{{ data.subject_code }}" required>
     </div>
     <div class="col-md-6">
         <label class="form-label">Material Type</label>
-        <input type="text" name="type" class="form-control" value="{{ data[3] }}" required>
+        <select name="type" class="form-select" required>
+            <option value="Notes" {% if data.material_type == "Notes" %}selected{% endif %}>Notes</option>
+            <option value="Syllabus" {% if data.material_type == "Syllabus" %}selected{% endif %}>Syllabus</option>
+            <option value="Previous Year Questions" {% if data.material_type == "Previous Year Questions" %}selected{% endif %}>Previous Year Questions</option>
+            <option value="Micro Notes" {% if data.material_type == "Micro Notes" %}selected{% endif %}>Micro Notes</option>
+        </select>
     </div>
     <div class="col-12 text-center">
         <button type="submit" class="btn btn-primary">Save Changes</button>
