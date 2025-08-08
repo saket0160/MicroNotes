@@ -31,7 +31,7 @@ class Notes(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     course = db.Column(db.String(100))
     semester = db.Column(db.String(100))
-    subject_code = db.Column(db.String(100))  # Already renamed
+    subject_code = db.Column(db.String(100))  # subject renamed to subject_code
     material_type = db.Column(db.String(100))
     filename = db.Column(db.String(200))
 
@@ -65,7 +65,7 @@ def upload():
     if request.method == 'POST':
         course = request.form['course']
         semester = request.form['semester']
-        subject_code = request.form['subject_code'].upper()  # Normalize
+        subject_code = request.form['subject_code'].upper()  # normalize
         material_type = request.form['type']
         file = request.files['file']
 
@@ -135,7 +135,7 @@ def edit_file(id):
     if request.method == 'POST':
         note.course = request.form['course']
         note.semester = request.form['semester']
-        note.subject_code = request.form['subject_code'].upper()  # Normalize
+        note.subject_code = request.form['subject_code'].upper()  # normalize
         note.material_type = request.form['type']
         db.session.commit()
         return redirect(url_for('view_files'))
@@ -144,5 +144,4 @@ def edit_file(id):
 
 # --- Run Server ---
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
